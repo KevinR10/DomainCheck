@@ -2,11 +2,14 @@ package com.example.domaincheck.service.check.impl;
 
 import com.example.domaincheck.service.check.DomainService;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.http.HttpHeaders;
+import org.apache.http.client.config.RequestConfig;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClientBuilder;
 import org.springframework.stereotype.Service;
-
-import java.io.IOException;
+import org.apache.http.HttpResponse;
 import java.net.HttpURLConnection;
-import java.net.URL;
 
 @Slf4j
 @Service
@@ -16,13 +19,11 @@ public class DomainServiceImpl implements DomainService {
         try {
             // 每隔一秒发送一次请求
             Thread.sleep(1000);
-            HttpURLConnection connection = getHttpURLConnection(f5ip, host, is_http);
-            int responseCode = connection.getResponseCode();
+            int responseCode = getHttpURLConnection(f5ip, host, is_http);
             if (responseCode == f5_code) {
                 return true;
             } else {
                 log.error("域名:{},host:{},f5_code:{} is not match, response code is {}", host, f5ip, f5_code, responseCode);
-                // TODO 告警, 发送邮件
             }
         } catch (Exception e) {
             log.error(e.toString());
@@ -30,21 +31,21 @@ public class DomainServiceImpl implements DomainService {
         return false;
     }
 
-    public static HttpURLConnection getHttpURLConnection(String f5ip, String host, boolean is_http) throws IOException {
-        URL url;
-        if (is_http) {
-            url = new URL("http://" + f5ip);
-        } else {
-            url = new URL("https://" + f5ip);
+    public int getHttpURLConnection(String f5ip, String host, boolean is_http) throws Exception {
+        String uri;
+        HttpResponse response;
+        CloseableHttpClient client = HttpClientBuilder.create().build();
+        RequestConfig config = RequestConfig.custom().setConnectTimeout(80000).setSocketTimeout(80000).build();
+        if (is_http){
+            uri = "http://" + f5ip;
+        }else {
+            uri = "https://" + f5ip;
         }
 
-        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-        connection.setRequestProperty("Host", host);
-        // 连接超时时间5秒
-        connection.setConnectTimeout(5000);
-        // 读取超时时间5秒
-        connection.setReadTimeout(5000);
-        connection.setRequestMethod("GET");
-        return connection;
+        HttpGet httpGet = new HttpGet(uri);
+        httpGet.setHeader(HttpHeaders.HOST, host);
+        httpGet.setConfig(config);
+        response = client.execute(httpGet);
+        return response.getStatusLine().getStatusCode();
     }
 }
